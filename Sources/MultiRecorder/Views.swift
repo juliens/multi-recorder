@@ -10,7 +10,11 @@ struct ContentView: View {
             SettingsView()
                 .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
             VStack(spacing: 0) {
-                PreviewGrid(previews: model.previews)
+                PreviewGrid(
+                    previews: model.previews,
+                    phones: model.phones
+                        .filter { model.enabledPhoneIDs.contains($0.id) }
+                        .map { PhoneTile(id: $0.id, name: $0.name, image: model.phonePreviews[$0.id]) })
                 Divider()
                 AudioMetersView()
                 Divider()
@@ -48,6 +52,7 @@ struct SettingsView: View {
                     CameraRow(camera: camera)
                 }
             }
+            .disabled(model.state.isBusy)
 
             Section("Audio") {
                 Picker(
@@ -64,6 +69,49 @@ struct SettingsView: View {
                 }
                 if let device = model.selectedAudioDevice {
                     Text("\(device.channelCount) channels, \(Int(device.sampleRate)) Hz")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(model.state.isBusy)
+
+            Section("Phones") {
+                if let problem = model.phoneProblem {
+                    Text(problem).foregroundStyle(.orange)
+                    Button("Open Local Network Settings") {
+                        if let url = URL(
+                            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
+                        {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+                if model.phones.isEmpty {
+                    Text("Open MultiRecorder Phone on an Android phone on the same Wi-Fi.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.phones) { phone in
+                    HStack {
+                        Toggle(
+                            phone.name,
+                            isOn: Binding(
+                                get: { model.enabledPhoneIDs.contains(phone.id) },
+                                set: { model.setPhone(phone.id, enabled: $0) }
+                            )
+                        )
+                        .help("\(phone.host):\(phone.port)")
+                        .disabled(model.state.isBusy)
+                        Spacer()
+                        Button("Camera…") { model.togglePhoneCamera(phone) }
+                            .help("Lens, orientation, zoom, focus and exposure of this phone")
+                    }
+                }
+                if !model.phones.isEmpty {
+                    Picker("Phone video", selection: $model.phoneQuality) {
+                        ForEach(PhoneQuality.allCases) { Text($0.label).tag($0) }
+                    }
+                    .disabled(model.state.isBusy)
+                    Text("Phones record on their own storage. Clips are downloaded and synced after the recording.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -84,9 +132,9 @@ struct SettingsView: View {
                     Button("Refresh devices") { model.refreshDevices() }
                 }
             }
+            .disabled(model.state.isBusy)
         }
         .formStyle(.grouped)
-        .disabled(model.state.isBusy)
     }
 }
 
@@ -120,37 +168,59 @@ struct CameraRow: View {
 
 // MARK: Previews
 
+struct PhoneTile: Identifiable {
+    let id: String
+    let name: String
+    let image: NSImage?
+}
+
 struct PreviewGrid: View {
     let previews: [PreviewHandle]
+    var phones: [PhoneTile] = []
 
     var body: some View {
         GeometryReader { geometry in
-            if previews.isEmpty {
+            let count = previews.count + phones.count
+            if count == 0 {
                 Text("No camera selected")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                let columns = Int(Double(previews.count).squareRoot().rounded(.up))
-                let rows = Int((Double(previews.count) / Double(columns)).rounded(.up))
+                let columns = Int(Double(count).squareRoot().rounded(.up))
+                let rows = Int((Double(count) / Double(columns)).rounded(.up))
                 let height = max(80, (geometry.size.height - CGFloat(rows + 1) * 8) / CGFloat(rows))
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(previews) { preview in
                         CameraPreviewView(layer: preview.layer)
                             .frame(height: height)
-                            .overlay(alignment: .topLeading) {
-                                Text(preview.name)
-                                    .font(.caption)
-                                    .padding(4)
-                                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-                                    .foregroundStyle(.white)
-                                    .padding(6)
+                            .overlay(alignment: .topLeading) { label(preview.name) }
+                    }
+                    ForEach(phones) { phone in
+                        ZStack {
+                            Color.black
+                            if let image = phone.image {
+                                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                            } else {
+                                ProgressView()
                             }
+                        }
+                        .frame(height: height)
+                        .overlay(alignment: .topLeading) { label("\(phone.name) (Wi-Fi, low-res preview)") }
                     }
                 }
                 .padding(8)
             }
         }
         .background(Color.black.opacity(0.9))
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .padding(4)
+            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+            .foregroundStyle(.white)
+            .padding(6)
     }
 }
 
@@ -277,6 +347,7 @@ struct ChannelMeter: View {
 
 struct ControlBar: View {
     @EnvironmentObject private var model: RecorderModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 16) {
@@ -291,7 +362,14 @@ struct ControlBar: View {
             .tint(isRecording ? .gray : .red)
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(model.state == .finishing || model.state == .combining)
+            .disabled(model.state == .finishing || model.state == .combining || model.state == .importingPhones)
+
+            if let progress = model.phoneProgress {
+                ProgressView(value: progress) {
+                    Text("Downloading phone clips").font(.caption)
+                }
+                .frame(width: 180)
+            }
 
             if case let .recording(since) = model.state {
                 TimelineView(.periodic(from: since, by: 1)) { context in
@@ -311,8 +389,16 @@ struct ControlBar: View {
 
             Spacer()
 
-            if model.lastFolder != nil {
+            Button("Open Recording…") {
+                if let folder = EditorWindow.chooseFolder(startingAt: model.outputRoot) {
+                    openWindow(id: EditorWindow.id, value: folder)
+                }
+            }
+
+            if let folder = model.lastFolder {
                 Button("Show in Finder") { model.revealLastFolder() }
+                    .disabled(model.state.isBusy)
+                Button("Open in Editor") { openWindow(id: EditorWindow.id, value: folder) }
                     .disabled(model.state.isBusy)
             }
         }
@@ -330,6 +416,7 @@ struct ControlBar: View {
         case .recording: "Stop"
         case .finishing: "Finishing…"
         case .combining: "Combining…"
+        case .importingPhones: "Phones…"
         }
     }
 

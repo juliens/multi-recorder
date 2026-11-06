@@ -64,4 +64,12 @@ public enum FileNaming {
 
     public static let combinedFileName = "combined.mov"
     public static let manifestFileName = "session.json"
+
+    public static let phonePrefix = "phone"
+
+    /// The clip downloaded from a phone, and the sound taken out of it.
+    public static func phoneFileNames(index: Int, phoneName: String) -> (video: String, audio: String) {
+        let base = "\(phonePrefix)\(index)_\(sanitize(phoneName))"
+        return ("\(base).mp4", "\(base).m4a")
+    }
 }

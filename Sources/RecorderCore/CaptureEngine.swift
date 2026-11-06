@@ -139,8 +139,9 @@ public final class CaptureEngine: @unchecked Sendable {
             audio?.begin(folder: folder, channels: options.audioChannels, start: start)
         }
 
+        let hostStart = CMSyncConvertTime(start, from: clock, to: CMClockGetHostTimeClock())
         recording = ActiveRecording(
-            folder: folder, clock: clock, start: start, startedAt: date,
+            folder: folder, clock: clock, start: start, hostStart: hostStart.seconds, startedAt: date,
             cameraIDs: cameraOrder, recordsAudio: recordAudio)
         return folder
     }
@@ -185,6 +186,7 @@ public final class CaptureEngine: @unchecked Sendable {
                 startedAt: recording.startedAt,
                 durationSeconds: (end - recording.start).seconds,
                 syncStartSeconds: recording.start.seconds,
+                hostStartSeconds: recording.hostStart,
                 tracks: lock.withLock { tracks },
                 combinedFile: nil
             )
@@ -215,6 +217,8 @@ private struct ActiveRecording {
     let folder: URL
     let clock: CMClock
     let start: CMTime
+    /// `start` on the host clock, in seconds.
+    let hostStart: Double
     let startedAt: Date
     let cameraIDs: [String]
     let recordsAudio: Bool

@@ -80,6 +80,19 @@ public struct RecordedTrack: Codable, Sendable {
     public let samplesWritten: Int
     public let samplesDropped: Int
     public let error: String?
+
+    public init(
+        kind: Kind, order: Int, source: String, file: String, samplesWritten: Int, samplesDropped: Int,
+        error: String?
+    ) {
+        self.kind = kind
+        self.order = order
+        self.source = source
+        self.file = file
+        self.samplesWritten = samplesWritten
+        self.samplesDropped = samplesDropped
+        self.error = error
+    }
 }
 
 public struct RecordingSummary: Codable, Sendable {
@@ -88,6 +101,8 @@ public struct RecordingSummary: Codable, Sendable {
     public let durationSeconds: Double
     /// Start instant on the capture session clock. Every track starts here.
     public let syncStartSeconds: Double
+    /// Start instant on the host clock (mach time), in seconds. Used to place phone clips.
+    public var hostStartSeconds: Double?
     public var tracks: [RecordedTrack]
     public var combinedFile: String?
 
@@ -112,6 +127,7 @@ public enum EngineError: LocalizedError {
     case noSamples
     case cannotAdd(String)
     case writer(String)
+    case plugin(String)
 
     public var errorDescription: String? {
         switch self {
@@ -121,6 +137,7 @@ public enum EngineError: LocalizedError {
         case .noSamples: "No samples received during the recording."
         case let .cannotAdd(name): "Cannot add \(name) to the capture session."
         case let .writer(message): message
+        case let .plugin(message): message
         }
     }
 }

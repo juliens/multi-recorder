@@ -26,5 +26,16 @@
 	<string>MultiRecorder records video from your cameras.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MultiRecorder records audio from your audio interface.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MultiRecorder finds phones running MultiRecorder Phone on your Wi-Fi and downloads their clips.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mrecphone._tcp</string>
+	</array>
 </dict>
 </plist>

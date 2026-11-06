@@ -9,7 +9,7 @@ public enum Muxer {
 
         let writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         var readers: [AVAssetReader] = []
-        var pairs: [Pair] = []
+        var pairs: [SampleCopier.Pair] = []
 
         for url in inputs {
             let asset = AVURLAsset(url: url)
@@ -32,7 +32,7 @@ public enum Muxer {
                     throw EngineError.writer("Cannot add a track from \(url.lastPathComponent).")
                 }
                 writer.add(writerInput)
-                pairs.append(Pair(output: trackOutput, input: writerInput))
+                pairs.append(SampleCopier.Pair(output: trackOutput, input: writerInput))
             }
             readers.append(reader)
         }
@@ -47,7 +47,7 @@ public enum Muxer {
         // Source files all start at the recording start, so their timelines begin at zero.
         writer.startSession(atSourceTime: .zero)
 
-        await copyAll(pairs)
+        await SampleCopier.copyAll(pairs)
 
         if let failed = readers.first(where: { $0.status == .failed }) {
             writer.cancelWriting()
@@ -60,33 +60,5 @@ public enum Muxer {
         if writer.status != .completed {
             throw writer.error ?? EngineError.writer("Writing the combined file failed.")
         }
-    }
-
-    /// Feeds every writer input in parallel so the writer can interleave the tracks.
-    private static func copyAll(_ pairs: [Pair]) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let group = DispatchGroup()
-            for (index, pair) in pairs.enumerated() {
-                group.enter()
-                let queue = DispatchQueue(label: "mux.\(index)")
-                var finished = false
-                pair.input.requestMediaDataWhenReady(on: queue) {
-                    while !finished, pair.input.isReadyForMoreMediaData {
-                        if let sample = pair.output.copyNextSampleBuffer(), pair.input.append(sample) {
-                            continue
-                        }
-                        finished = true
-                        pair.input.markAsFinished()
-                        group.leave()
-                    }
-                }
-            }
-            group.notify(queue: .global()) { continuation.resume() }
-        }
-    }
-
-    private struct Pair {
-        let output: AVAssetReaderTrackOutput
-        let input: AVAssetWriterInput
     }
 }

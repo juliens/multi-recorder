@@ -1,0 +1,9 @@
+[submodule "Sources/VST3Host/vst3sdk/base"]
+	path = Sources/VST3Host/vst3sdk/base
+	url = https://github.com/steinbergmedia/vst3_base
+[submodule "Sources/VST3Host/vst3sdk/pluginterfaces"]
+	path = Sources/VST3Host/vst3sdk/pluginterfaces
+	url = https://github.com/steinbergmedia/vst3_pluginterfaces
+[submodule "Sources/VST3Host/vst3sdk/public.sdk"]
+	path = Sources/VST3Host/vst3sdk/public.sdk
+	url = https://github.com/steinbergmedia/vst3_public_sdk
